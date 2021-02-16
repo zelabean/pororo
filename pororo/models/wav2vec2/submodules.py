@@ -12,8 +12,8 @@ from fairseq.models.wav2vec.wav2vec2_asr import (
     base_architecture,
 )
 from fairseq.tasks.audio_pretraining import AudioPretrainingTask
-from wav2letter.criterion import CpuViterbiPath, get_data_ptr_as_bytes
-from wav2letter.decoder import CriterionType
+# from wav2letter.criterion import CpuViterbiPath, get_data_ptr_as_bytes
+# from wav2letter.decoder import CriterionType
 
 
 class BrainWav2VecEncoder(FairseqEncoder):
@@ -130,75 +130,75 @@ class BrainWav2VecCtc(Wav2VecCtc):
         return cls(w2v_encoder, args)
 
 
-class W2lDecoder(object):
+# class W2lDecoder(object):
 
-    def __init__(self, tgt_dict):
-        self.tgt_dict = tgt_dict
-        self.vocab_size = len(tgt_dict)
-        self.nbest = 1
+#     def __init__(self, tgt_dict):
+#         self.tgt_dict = tgt_dict
+#         self.vocab_size = len(tgt_dict)
+#         self.nbest = 1
 
-        self.criterion_type = CriterionType.CTC
-        self.blank = (tgt_dict.index("<ctc_blank>")
-                      if "<ctc_blank>" in tgt_dict.indices else tgt_dict.bos())
-        self.asg_transitions = None
+#         self.criterion_type = CriterionType.CTC
+#         self.blank = (tgt_dict.index("<ctc_blank>")
+#                       if "<ctc_blank>" in tgt_dict.indices else tgt_dict.bos())
+#         self.asg_transitions = None
 
-    def generate(self, models, sample, **unused):
-        """Generate a batch of inferences."""
-        # model.forward normally channels prev_output_tokens into the decoder
-        # separately, but SequenceGenerator directly calls model.encoder
-        encoder_input = {
-            k: v
-            for k, v in sample["net_input"].items()
-            if k != "prev_output_tokens"
-        }
-        emissions = self.get_emissions(models, encoder_input)
-        return self.decode(emissions)
+#     def generate(self, models, sample, **unused):
+#         """Generate a batch of inferences."""
+#         # model.forward normally channels prev_output_tokens into the decoder
+#         # separately, but SequenceGenerator directly calls model.encoder
+#         encoder_input = {
+#             k: v
+#             for k, v in sample["net_input"].items()
+#             if k != "prev_output_tokens"
+#         }
+#         emissions = self.get_emissions(models, encoder_input)
+#         return self.decode(emissions)
 
-    def get_emissions(self, models, encoder_input):
-        """Run encoder and normalize emissions"""
-        encoder_out = models[0](**encoder_input)
-        if self.criterion_type == CriterionType.CTC:
-            emissions = models[0].get_normalized_probs(encoder_out,
-                                                       log_probs=True)
+#     def get_emissions(self, models, encoder_input):
+#         """Run encoder and normalize emissions"""
+#         encoder_out = models[0](**encoder_input)
+#         if self.criterion_type == CriterionType.CTC:
+#             emissions = models[0].get_normalized_probs(encoder_out,
+#                                                        log_probs=True)
 
-        return emissions.transpose(0, 1).float().cpu().contiguous()
+#         return emissions.transpose(0, 1).float().cpu().contiguous()
 
-    def get_tokens(self, idxs):
-        """Normalize tokens by handling CTC blank, ASG replabels, etc."""
-        idxs = (g[0] for g in it.groupby(idxs))
-        idxs = filter(lambda x: x != self.blank, idxs)
+#     def get_tokens(self, idxs):
+#         """Normalize tokens by handling CTC blank, ASG replabels, etc."""
+#         idxs = (g[0] for g in it.groupby(idxs))
+#         idxs = filter(lambda x: x != self.blank, idxs)
 
-        return torch.LongTensor(list(idxs))
+#         return torch.LongTensor(list(idxs))
 
 
-class W2lViterbiDecoder(W2lDecoder):
+# class W2lViterbiDecoder(W2lDecoder):
 
-    def __init__(self, tgt_dict):
-        super().__init__(tgt_dict)
+#     def __init__(self, tgt_dict):
+#         super().__init__(tgt_dict)
 
-    def decode(self, emissions):
-        batch_size, time_length, num_classes = emissions.size()
+#     def decode(self, emissions):
+#         batch_size, time_length, num_classes = emissions.size()
 
-        if self.asg_transitions is None:
-            transitions = torch.FloatTensor(num_classes, num_classes).zero_()
-        else:
-            transitions = torch.FloatTensor(self.asg_transitions).view(
-                num_classes, num_classes)
+#         if self.asg_transitions is None:
+#             transitions = torch.FloatTensor(num_classes, num_classes).zero_()
+#         else:
+#             transitions = torch.FloatTensor(self.asg_transitions).view(
+#                 num_classes, num_classes)
 
-        viterbi_path = torch.IntTensor(batch_size, time_length)
-        workspace = torch.ByteTensor(
-            CpuViterbiPath.get_workspace_size(batch_size, time_length,
-                                              num_classes))
-        CpuViterbiPath.compute(
-            batch_size,
-            time_length,
-            num_classes,
-            get_data_ptr_as_bytes(emissions),
-            get_data_ptr_as_bytes(transitions),
-            get_data_ptr_as_bytes(viterbi_path),
-            get_data_ptr_as_bytes(workspace),
-        )
-        return [[{
-            "tokens": self.get_tokens(viterbi_path[b].tolist()),
-            "score": 0
-        }] for b in range(batch_size)]
+#         viterbi_path = torch.IntTensor(batch_size, time_length)
+#         workspace = torch.ByteTensor(
+#             CpuViterbiPath.get_workspace_size(batch_size, time_length,
+#                                               num_classes))
+#         CpuViterbiPath.compute(
+#             batch_size,
+#             time_length,
+#             num_classes,
+#             get_data_ptr_as_bytes(emissions),
+#             get_data_ptr_as_bytes(transitions),
+#             get_data_ptr_as_bytes(viterbi_path),
+#             get_data_ptr_as_bytes(workspace),
+#         )
+#         return [[{
+#             "tokens": self.get_tokens(viterbi_path[b].tolist()),
+#             "score": 0
+#         }] for b in range(batch_size)]
